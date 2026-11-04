@@ -1,0 +1,32 @@
+# MakeItShip caller — vercel. Copy into .github/workflows/ and replace the
+# placeholders: __VERCEL_ORG_ID__, __VERCEL_PROJECT_ID__, __VERCEL_STAGING_ALIAS__.
+# Contract: staging deploys on every push to the staging branch; "Staging" in the name.
+# The deploy itself lives in ai-lab-development-bot/makeitship-actions (@v1).
+name: Deploy Staging
+
+on:
+  push:
+    branches:
+      - staging
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-staging
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    permissions:
+      contents: write
+    uses: ai-lab-development-bot/makeitship-actions/.github/workflows/deploy.yml@v1
+    with:
+      environment: staging
+      host: vercel
+      vercel_org_id: __VERCEL_ORG_ID__
+      vercel_project_id: __VERCEL_PROJECT_ID__
+      vercel_staging_alias: __VERCEL_STAGING_ALIAS__
+    secrets:
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
