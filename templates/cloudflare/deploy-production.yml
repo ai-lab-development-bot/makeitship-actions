@@ -1,0 +1,40 @@
+# MakeItShip caller — cloudflare. Copy into .github/workflows/ and replace the
+# placeholders: __WORKER_NAME__.
+# Contract: workflow_dispatch ONLY (never a push trigger); the tag and triggered_by inputs; "Production" in the name. MakeItShip's Publish dispatches it at the vX.Y.Z tag.
+# The deploy itself lives in ai-lab-development-bot/makeitship-actions (@v1).
+name: Deploy Production
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release version tag (sent by MakeItShip's Publish).
+        required: false
+        type: string
+      triggered_by:
+        description: Who published the release (sent by MakeItShip's Publish).
+        required: false
+        type: string
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    permissions:
+      contents: write
+    uses: ai-lab-development-bot/makeitship-actions/.github/workflows/deploy.yml@v1
+    with:
+      environment: production
+      version: ${{ inputs.tag }}
+      require_version_tag: true
+      allowed_deployers: ${{ vars.PRODUCTION_DEPLOYERS }}
+      host: cloudflare
+      cloudflare_worker_name: __WORKER_NAME__-production
+    secrets:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}

@@ -1,0 +1,31 @@
+# MakeItShip caller — netlify. Copy into .github/workflows/ and replace the
+# placeholders: __NETLIFY_SITE_ID__, __OUTPUT_DIR__.
+# Contract: staging deploys on every push to the staging branch; "Staging" in the name.
+# The deploy itself lives in ai-lab-development-bot/makeitship-actions (@v1).
+name: Deploy Staging
+
+on:
+  push:
+    branches:
+      - staging
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-staging
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    permissions:
+      contents: write
+    uses: ai-lab-development-bot/makeitship-actions/.github/workflows/deploy.yml@v1
+    with:
+      environment: staging
+      host: netlify
+      netlify_site_id: __NETLIFY_SITE_ID__
+      output_dir: __OUTPUT_DIR__
+    secrets:
+      NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}

@@ -1,0 +1,50 @@
+# MakeItShip caller — netlify. Copy into .github/workflows/ and replace the
+# placeholders: __NETLIFY_SITE_ID__, __OUTPUT_DIR__.
+# Contract: the file name, the four inputs (backup_key declared, unused) and `change <row_id>` in the run name — MakeItShip's Roll back depends on them.
+# The deploy itself lives in ai-lab-development-bot/makeitship-actions (@v1).
+name: Rollback
+run-name: "Rollback ${{ inputs.target_environment }} — change ${{ inputs.row_id }}"
+
+on:
+  workflow_dispatch:
+    inputs:
+      target_environment:
+        description: Environment to roll back.
+        required: true
+        type: string
+      target_ref:
+        description: Commit to redeploy.
+        required: true
+        type: string
+      backup_key:
+        description: Unused for code-only sites; declared because MakeItShip always sends it.
+        required: false
+        type: string
+        default: ""
+      row_id:
+        description: The MakeItShip change this rollback closes.
+        required: true
+        type: string
+
+concurrency:
+  group: deploy-${{ inputs.target_environment }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    permissions:
+      contents: write
+    uses: ai-lab-development-bot/makeitship-actions/.github/workflows/deploy.yml@v1
+    with:
+      environment: ${{ inputs.target_environment }}
+      target_ref: ${{ inputs.target_ref }}
+      deployed_sha: ${{ inputs.target_ref }}
+      allowed_deployers: ${{ vars.PRODUCTION_DEPLOYERS }}
+      host: netlify
+      netlify_site_id: __NETLIFY_SITE_ID__
+      output_dir: __OUTPUT_DIR__
+    secrets:
+      NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}

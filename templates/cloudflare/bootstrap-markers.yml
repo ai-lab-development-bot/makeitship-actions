@@ -1,0 +1,32 @@
+# MakeItShip caller — cloudflare. Copy into .github/workflows/ and replace the
+# placeholders: none.
+# Run once per environment after the callers are merged.
+# The deploy itself lives in ai-lab-development-bot/makeitship-actions (@v1).
+name: Bootstrap Deploy Markers
+
+on:
+  workflow_dispatch:
+    inputs:
+      target_environment:
+        description: Environment to seed the deploy/{env}/current marker for.
+        required: true
+        default: staging
+        type: choice
+        options:
+          - staging
+          - production
+
+concurrency:
+  group: deploy-${{ inputs.target_environment }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  bootstrap:
+    permissions:
+      contents: write
+    uses: ai-lab-development-bot/makeitship-actions/.github/workflows/bootstrap.yml@v1
+    with:
+      environment: ${{ inputs.target_environment }}

@@ -1,0 +1,303 @@
+# MakeItShip shared deploy workflow (reusable, on: workflow_call).
+#
+# A customer repository calls it from its own short caller files
+# (templates/<host>/), so the guard, the deploy markers and the host step are the
+# same in every repository and a fix reaches every caller of @v1 at once.
+#
+# Jobs:
+#   guard  — production only: stops the run unless MakeItShip (the
+#            makeitship-release App) or a login on the allowed list started it.
+#   deploy — builds and deploys to the host: vercel | netlify | cloudflare.
+#   mark   — writes the deploy markers MakeItShip reads (deploy/{env}/{ts},
+#            deploy/{env}/current). The message format is a contract; do not change it.
+#
+# The caller grants `contents: write` on the job that calls this workflow (the
+# marker push needs it; a called workflow's token is capped by its caller) and
+# holds the concurrency group (deploy-{env}). This file carries no concurrency block.
+name: MakeItShip Deploy
+
+on:
+  workflow_call:
+    inputs:
+      environment:
+        description: Environment to deploy — staging or production.
+        required: true
+        type: string
+      host:
+        description: Where the site is hosted — vercel, netlify or cloudflare.
+        required: true
+        type: string
+      target_ref:
+        description: Git ref to deploy. Empty = the ref that triggered the run; rollback sets the commit to redeploy.
+        required: false
+        type: string
+        default: ""
+      deployed_sha:
+        description: Commit the markers record. Empty = the checked-out commit.
+        required: false
+        type: string
+        default: ""
+      version:
+        description: Release tag (vX.Y.Z), a cosmetic suffix on the audit marker. Empty = git describe.
+        required: false
+        type: string
+        default: ""
+      require_version_tag:
+        description: Production deploys only — refuse a run whose ref is not a vX.Y.Z tag.
+        required: false
+        type: boolean
+        default: false
+      allowed_deployers:
+        description: GitHub logins allowed to start a production run by hand, comma- or space-separated (the caller passes vars.PRODUCTION_DEPLOYERS).
+        required: false
+        type: string
+        default: ""
+      node_version:
+        description: Node.js version for the build.
+        required: false
+        type: string
+        default: "20"
+      node_cache:
+        description: Package-manager cache for actions/setup-node (npm, pnpm, yarn); empty turns caching off.
+        required: false
+        type: string
+        default: "npm"
+      install_command:
+        description: Installs the dependencies (netlify and cloudflare).
+        required: false
+        type: string
+        default: "npm ci"
+      build_command:
+        description: Builds the site (netlify and cloudflare). Vercel builds with the project's own settings.
+        required: false
+        type: string
+        default: "npm run build"
+      output_dir:
+        description: Netlify only — the folder the build writes.
+        required: false
+        type: string
+        default: "dist"
+      vercel_org_id:
+        description: Vercel only — the team or account id.
+        required: false
+        type: string
+        default: ""
+      vercel_project_id:
+        description: Vercel only — the project id.
+        required: false
+        type: string
+        default: ""
+      vercel_staging_alias:
+        description: Vercel only — a domain to point at each staging deploy (optional).
+        required: false
+        type: string
+        default: ""
+      netlify_site_id:
+        description: Netlify only — the site id.
+        required: false
+        type: string
+        default: ""
+      netlify_staging_alias:
+        description: Netlify only — the branch alias staging deploys go to.
+        required: false
+        type: string
+        default: "staging"
+      cloudflare_worker_name:
+        description: Cloudflare only — the Worker to deploy for this environment.
+        required: false
+        type: string
+        default: ""
+    secrets:
+      VERCEL_TOKEN:
+        required: false
+      NETLIFY_AUTH_TOKEN:
+        required: false
+      CLOUDFLARE_API_TOKEN:
+        required: false
+      CLOUDFLARE_ACCOUNT_ID:
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  guard:
+    name: Check who started it
+    if: ${{ inputs.environment == 'production' }}
+    runs-on: ubuntu-latest
+    permissions: {}
+    steps:
+      - name: Allow only MakeItShip and the allowed list
+        env:
+          ACTOR: ${{ github.triggering_actor }}
+          ALLOWED: ${{ inputs.allowed_deployers }}
+          REF: ${{ github.ref }}
+          REQUIRE_TAG: ${{ inputs.require_version_tag }}
+        run: |
+          set -euo pipefail
+          actor="$(printf '%s' "$ACTOR" | tr '[:upper:]' '[:lower:]')"
+          ok=false
+          if [ "$actor" = "makeitship-release[bot]" ]; then ok=true; fi
+          for login in $(printf '%s' "$ALLOWED" | tr ',' ' ' | tr '[:upper:]' '[:lower:]'); do
+            if [ "$login" = "$actor" ]; then ok=true; fi
+          done
+          if [ "$ok" != true ]; then
+            echo "::error title=Production is published with MakeItShip::${ACTOR} is not allowed to start a production deploy. Publish from MakeItShip, or add the login to the PRODUCTION_DEPLOYERS repository variable."
+            exit 1
+          fi
+          if [ "$REQUIRE_TAG" = "true" ] && [[ "$REF" != refs/tags/v* ]]; then
+            echo "::error title=Production deploys a release tag::This run is on ${REF}. Production deploys run on a vX.Y.Z tag."
+            exit 1
+          fi
+          echo "Started by ${ACTOR}: allowed."
+
+  deploy:
+    name: Build and deploy
+    needs: guard
+    if: ${{ always() && (needs.guard.result == 'success' || needs.guard.result == 'skipped') }}
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    permissions:
+      contents: read
+    steps:
+      - name: Check the inputs
+        env:
+          ENVIRONMENT: ${{ inputs.environment }}
+          HOST: ${{ inputs.host }}
+        run: |
+          set -euo pipefail
+          case "$ENVIRONMENT" in staging|production) ;; *) echo "::error::environment must be staging or production, got '${ENVIRONMENT}'"; exit 1;; esac
+          case "$HOST" in vercel|netlify|cloudflare) ;; *) echo "::error::host must be vercel, netlify or cloudflare, got '${HOST}'"; exit 1;; esac
+
+      - name: Checkout code
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: ${{ inputs.target_ref }}
+          persist-credentials: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: ${{ inputs.node_version }}
+          cache: ${{ inputs.node_cache }}
+
+      - name: Install dependencies
+        if: ${{ inputs.host != 'vercel' }}
+        env:
+          INSTALL_COMMAND: ${{ inputs.install_command }}
+        run: bash -c "$INSTALL_COMMAND"
+
+      - name: Build
+        if: ${{ inputs.host != 'vercel' }}
+        env:
+          BUILD_COMMAND: ${{ inputs.build_command }}
+        run: bash -c "$BUILD_COMMAND"
+
+      - name: Deploy to Vercel
+        if: ${{ inputs.host == 'vercel' }}
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ inputs.vercel_org_id }}
+          VERCEL_PROJECT_ID: ${{ inputs.vercel_project_id }}
+          ENVIRONMENT: ${{ inputs.environment }}
+          STAGING_ALIAS: ${{ inputs.vercel_staging_alias }}
+        run: |
+          set -euo pipefail
+          : "${VERCEL_TOKEN:?The VERCEL_TOKEN secret is missing}"
+          : "${VERCEL_ORG_ID:?vercel_org_id is missing}"
+          : "${VERCEL_PROJECT_ID:?vercel_project_id is missing}"
+          vercel="npx --yes vercel@65.11.0"
+          if [ "$ENVIRONMENT" = production ]; then
+            $vercel pull --yes --environment=production --token="$VERCEL_TOKEN"
+            $vercel build --prod --token="$VERCEL_TOKEN"
+            $vercel deploy --prebuilt --prod --token="$VERCEL_TOKEN"
+          else
+            $vercel pull --yes --environment=preview --token="$VERCEL_TOKEN"
+            $vercel build --token="$VERCEL_TOKEN"
+            url="$($vercel deploy --prebuilt --token="$VERCEL_TOKEN")"
+            echo "Staging deploy: ${url}"
+            if [ -n "$STAGING_ALIAS" ]; then
+              $vercel alias set "$url" "$STAGING_ALIAS" --token="$VERCEL_TOKEN"
+            fi
+          fi
+
+      - name: Deploy to Netlify
+        if: ${{ inputs.host == 'netlify' }}
+        env:
+          NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
+          NETLIFY_SITE_ID: ${{ inputs.netlify_site_id }}
+          ENVIRONMENT: ${{ inputs.environment }}
+          OUTPUT_DIR: ${{ inputs.output_dir }}
+          STAGING_ALIAS: ${{ inputs.netlify_staging_alias }}
+        run: |
+          set -euo pipefail
+          : "${NETLIFY_AUTH_TOKEN:?The NETLIFY_AUTH_TOKEN secret is missing}"
+          : "${NETLIFY_SITE_ID:?netlify_site_id is missing}"
+          netlify="npx --yes netlify-cli@27.16.2"
+          if [ "$ENVIRONMENT" = production ]; then
+            $netlify deploy --no-build --dir "$OUTPUT_DIR" --site "$NETLIFY_SITE_ID" --prod
+          else
+            $netlify deploy --no-build --dir "$OUTPUT_DIR" --site "$NETLIFY_SITE_ID" --alias "$STAGING_ALIAS"
+          fi
+
+      - name: Deploy to Cloudflare Workers
+        if: ${{ inputs.host == 'cloudflare' }}
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          WORKER_NAME: ${{ inputs.cloudflare_worker_name }}
+        run: |
+          set -euo pipefail
+          : "${CLOUDFLARE_API_TOKEN:?The CLOUDFLARE_API_TOKEN secret is missing}"
+          : "${CLOUDFLARE_ACCOUNT_ID:?The CLOUDFLARE_ACCOUNT_ID secret is missing}"
+          : "${WORKER_NAME:?cloudflare_worker_name is missing}"
+          npx --yes wrangler@4.157.0 deploy --name "$WORKER_NAME"
+
+  mark:
+    name: Mark deploy
+    needs: deploy
+    if: ${{ always() && needs.deploy.result == 'success' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: ${{ inputs.target_ref }}
+          fetch-depth: 0
+
+      # >>> mark-deploy (kept identical to mark.yml; CI checks it)
+      - name: Create deploy marker and move current
+        env:
+          ENV: ${{ inputs.environment }}
+          DEPLOYED_SHA: ${{ inputs.deployed_sha }}
+          VERSION_IN: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          deployed_sha="${DEPLOYED_SHA:-$(git rev-parse HEAD)}"
+
+          # parentSHA = whatever deploy/{env}/current points at right now (empty if none)
+          parent_sha=""
+          if git rev-parse -q --verify "refs/tags/deploy/${ENV}/current" >/dev/null; then
+            parent_sha="$(git rev-list -n1 "refs/tags/deploy/${ENV}/current")"
+          fi
+
+          ts="$(date -u +'%Y%m%dT%H%M%SZ')"
+          version="${VERSION_IN:-$(git describe --tags --match 'v*' --abbrev=0 2>/dev/null || true)}"
+          name="deploy/${ENV}/${ts}"
+          if [ -n "$version" ]; then name="${name}-${version}"; fi
+
+          msg=$(printf 'deployedSHA=%s\nparentSHA=%s\nbackupKey=\n' "$deployed_sha" "$parent_sha")
+
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          # immutable audit tag
+          git tag -a "$name" "$deployed_sha" -m "$msg"
+          git push origin "refs/tags/${name}"
+
+          # moving pointer (force-updated with the same message)
+          git tag -f -a "deploy/${ENV}/current" "$deployed_sha" -m "$msg"
+          git push -f origin "refs/tags/deploy/${ENV}/current"
+      # <<< mark-deploy

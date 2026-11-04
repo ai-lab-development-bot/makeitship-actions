@@ -1,0 +1,80 @@
+# MakeItShip deploy markers (reusable, on: workflow_call) — for a repository
+# that keeps its own deploy step instead of deploy.yml. Call it after a
+# successful deploy; it writes deploy/{env}/{ts} and moves deploy/{env}/current,
+# which MakeItShip reads for the live version and for Roll back. The message
+# format is a contract; do not change it. The caller grants `contents: write`.
+name: MakeItShip Mark Deploy
+
+on:
+  workflow_call:
+    inputs:
+      environment:
+        description: Environment the deploy reached — staging or production.
+        required: true
+        type: string
+      target_ref:
+        description: Git ref to check out. Empty = the ref that triggered the run.
+        required: false
+        type: string
+        default: ""
+      deployed_sha:
+        description: Commit the markers record. Empty = the checked-out commit.
+        required: false
+        type: string
+        default: ""
+      version:
+        description: Release tag (vX.Y.Z), a cosmetic suffix on the audit marker. Empty = git describe.
+        required: false
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  mark:
+    name: Mark deploy
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: ${{ inputs.target_ref }}
+          fetch-depth: 0
+
+      # >>> mark-deploy (kept identical to mark.yml; CI checks it)
+      - name: Create deploy marker and move current
+        env:
+          ENV: ${{ inputs.environment }}
+          DEPLOYED_SHA: ${{ inputs.deployed_sha }}
+          VERSION_IN: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          deployed_sha="${DEPLOYED_SHA:-$(git rev-parse HEAD)}"
+
+          # parentSHA = whatever deploy/{env}/current points at right now (empty if none)
+          parent_sha=""
+          if git rev-parse -q --verify "refs/tags/deploy/${ENV}/current" >/dev/null; then
+            parent_sha="$(git rev-list -n1 "refs/tags/deploy/${ENV}/current")"
+          fi
+
+          ts="$(date -u +'%Y%m%dT%H%M%SZ')"
+          version="${VERSION_IN:-$(git describe --tags --match 'v*' --abbrev=0 2>/dev/null || true)}"
+          name="deploy/${ENV}/${ts}"
+          if [ -n "$version" ]; then name="${name}-${version}"; fi
+
+          msg=$(printf 'deployedSHA=%s\nparentSHA=%s\nbackupKey=\n' "$deployed_sha" "$parent_sha")
+
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          # immutable audit tag
+          git tag -a "$name" "$deployed_sha" -m "$msg"
+          git push origin "refs/tags/${name}"
+
+          # moving pointer (force-updated with the same message)
+          git tag -f -a "deploy/${ENV}/current" "$deployed_sha" -m "$msg"
+          git push -f origin "refs/tags/deploy/${ENV}/current"
+      # <<< mark-deploy

@@ -1,0 +1,50 @@
+# MakeItShip production guard (reusable, on: workflow_call) — for a repository
+# that keeps its own deploy step instead of deploy.yml. Make the production
+# deploy job `needs:` this one: the run stops unless MakeItShip (the
+# makeitship-release App) or a login on the allowed list started it.
+name: MakeItShip Production Guard
+
+on:
+  workflow_call:
+    inputs:
+      allowed_deployers:
+        description: GitHub logins allowed to start a production run by hand, comma- or space-separated (the caller passes vars.PRODUCTION_DEPLOYERS).
+        required: false
+        type: string
+        default: ""
+      require_version_tag:
+        description: Refuse a run whose ref is not a vX.Y.Z tag.
+        required: false
+        type: boolean
+        default: false
+
+permissions: {}
+
+jobs:
+  guard:
+    name: Check who started it
+    runs-on: ubuntu-latest
+    steps:
+      - name: Allow only MakeItShip and the allowed list
+        env:
+          ACTOR: ${{ github.triggering_actor }}
+          ALLOWED: ${{ inputs.allowed_deployers }}
+          REF: ${{ github.ref }}
+          REQUIRE_TAG: ${{ inputs.require_version_tag }}
+        run: |
+          set -euo pipefail
+          actor="$(printf '%s' "$ACTOR" | tr '[:upper:]' '[:lower:]')"
+          ok=false
+          if [ "$actor" = "makeitship-release[bot]" ]; then ok=true; fi
+          for login in $(printf '%s' "$ALLOWED" | tr ',' ' ' | tr '[:upper:]' '[:lower:]'); do
+            if [ "$login" = "$actor" ]; then ok=true; fi
+          done
+          if [ "$ok" != true ]; then
+            echo "::error title=Production is published with MakeItShip::${ACTOR} is not allowed to start a production deploy. Publish from MakeItShip, or add the login to the PRODUCTION_DEPLOYERS repository variable."
+            exit 1
+          fi
+          if [ "$REQUIRE_TAG" = "true" ] && [[ "$REF" != refs/tags/v* ]]; then
+            echo "::error title=Production deploys a release tag::This run is on ${REF}. Production deploys run on a vX.Y.Z tag."
+            exit 1
+          fi
+          echo "Started by ${ACTOR}: allowed."

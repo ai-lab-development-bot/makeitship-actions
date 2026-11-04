@@ -1,0 +1,43 @@
+# MakeItShip marker bootstrap (reusable, on: workflow_call). Run once per
+# environment, after the callers are merged, to seed deploy/{env}/current from
+# what is live now; until then MakeItShip shows Roll back as unavailable there.
+# The caller holds the deploy-{env} concurrency group (this force-moves
+# current, so it must never race a deploy) and grants `contents: write`.
+name: MakeItShip Bootstrap Markers
+
+on:
+  workflow_call:
+    inputs:
+      environment:
+        description: Environment to seed — staging or production.
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  bootstrap:
+    name: Bootstrap deploy markers
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: 0
+
+      - name: Seed deploy/{env}/current
+        env:
+          ENV: ${{ inputs.environment }}
+        run: |
+          set -euo pipefail
+          case "$ENV" in staging|production) ;; *) echo "::error::environment must be staging or production, got '${ENV}'"; exit 1;; esac
+          head="$(git rev-parse HEAD)"
+          parent="$(git rev-parse -q --verify "HEAD^" || true)"   # best-effort
+          msg=$(printf 'deployedSHA=%s\nparentSHA=%s\nbackupKey=\n' "$head" "$parent")
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag -f -a "deploy/${ENV}/current" "$head" -m "$msg"
+          git push -f origin "refs/tags/deploy/${ENV}/current"
