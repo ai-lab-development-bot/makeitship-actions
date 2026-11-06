@@ -46,11 +46,13 @@ Settings the callers rely on: each calling job grants `contents: write` (the mar
 
 Releases are tagged `vX.Y.Z`, and the major tag (`v1`) moves to the latest release in that line. Callers use `@v1`. A breaking change ships as `v2`, and a repository moves to it with a pull request when it is ready.
 
+Adding, renaming or removing a caller file, or changing a caller's trigger or inputs, is a breaking change: it ships as a new major, never inside `v1`. MakeItShip checks the caller files and brings them to the production branch during setup, so it supports a new major before that major is tagged.
+
 ## What MakeItShip depends on
 
 Do not change these in a caller file. Publish and Roll back fail without them, and the failure is easy to miss:
 
-- **The file names** `deploy-production.yml` and `rollback.yml`.
+- **The caller files and their paths.** MakeItShip reads `.github/workflows/deploy-production.yml`, `deploy-staging.yml` and `rollback.yml` on both the staging and the production branch. During setup it brings exactly these three files to the production branch, through a pull request you merge. `bootstrap-markers.yml` is run once by hand and is not checked.
 - **No push trigger in production.** `deploy-production.yml` runs only on `workflow_dispatch`, with the inputs `tag` and `triggered_by`.
 - **The rollback inputs.** `rollback.yml` declares `target_environment`, `target_ref`, `backup_key` and `row_id`, and has `change ${{ inputs.row_id }}` in its `run-name`.
 - **The environment word in the workflow name.** It contains `Staging`, `Production` or `Rollback`.
