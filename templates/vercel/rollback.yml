@@ -46,5 +46,7 @@ jobs:
       host: vercel
       vercel_org_id: __VERCEL_ORG_ID__
       vercel_project_id: __VERCEL_PROJECT_ID__
+      # Rolling staging back moves its stable address too (production's domains move with --prod).
+      vercel_staging_alias: __VERCEL_STAGING_ALIAS__
     secrets:
       VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}

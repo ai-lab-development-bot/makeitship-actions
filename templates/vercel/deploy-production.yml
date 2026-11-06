@@ -1,5 +1,5 @@
 # MakeItShip caller — vercel. Copy into .github/workflows/ and replace the
-# placeholders: __VERCEL_ORG_ID__, __VERCEL_PROJECT_ID__, __VERCEL_STAGING_ALIAS__.
+# placeholders: __VERCEL_ORG_ID__, __VERCEL_PROJECT_ID__.
 # Contract: workflow_dispatch ONLY (never a push trigger); the tag and triggered_by inputs; "Production" in the name. MakeItShip's Publish dispatches it at the vX.Y.Z tag.
 # The deploy itself lives in ai-lab-development-bot/makeitship-actions (@v1).
 name: Deploy Production
