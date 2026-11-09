@@ -1,7 +1,8 @@
 # MakeItShip production guard (reusable, on: workflow_call) — for a repository
 # that keeps its own deploy step instead of deploy.yml. Make the production
 # deploy job `needs:` this one: the run stops unless MakeItShip (the
-# makeitship-release App) or a login on the allowed list started it.
+# makeitship-release App, or its early-access twin makeitship-release-early) or a
+# login on the allowed list started it.
 name: MakeItShip Production Guard
 
 on:
@@ -35,7 +36,7 @@ jobs:
           set -euo pipefail
           actor="$(printf '%s' "$ACTOR" | tr '[:upper:]' '[:lower:]')"
           ok=false
-          if [ "$actor" = "makeitship-release[bot]" ]; then ok=true; fi
+          case "$actor" in makeitship-release\[bot\]|makeitship-release-early\[bot\]) ok=true ;; esac
           for login in $(printf '%s' "$ALLOWED" | tr ',' ' ' | tr '[:upper:]' '[:lower:]'); do
             if [ "$login" = "$actor" ]; then ok=true; fi
           done

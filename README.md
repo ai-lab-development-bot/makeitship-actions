@@ -15,7 +15,7 @@ Hosts: **Vercel**, **Netlify**, **Cloudflare Workers**.
 
 `deploy.yml` runs three jobs:
 
-- **guard**: production only. The run stops unless MakeItShip (the `makeitship-release` GitHub App) or a login in the repository variable `PRODUCTION_DEPLOYERS` started it. A production deploy started from MakeItShip must also run on a `vX.Y.Z` tag.
+- **guard**: production only. The run stops unless MakeItShip (the `makeitship-release` GitHub App, or `makeitship-release-early`, its early-access App) or a login in the repository variable `PRODUCTION_DEPLOYERS` started it. A production deploy started from MakeItShip must also run on a `vX.Y.Z` tag.
 - **deploy**: builds the site and deploys it to the host.
 - **mark**: writes the deploy markers MakeItShip reads (`deploy/{env}/{timestamp}` and the moving `deploy/{env}/current`). They give MakeItShip the live version and Roll back.
 
