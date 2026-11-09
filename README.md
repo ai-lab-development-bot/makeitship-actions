@@ -24,7 +24,7 @@ A repository that needs its own deploy step keeps it and calls `guard.yml` befor
 ## Set up a repository
 
 1. Copy the four files from `templates/<host>/` into `.github/workflows/` and replace the `__PLACEHOLDERS__`. An optional value you do not use, such as the Vercel staging domain, becomes an empty string `""`.
-2. Add the host's secrets. Put them in the repository's `production` and `staging` environments where your GitHub plan allows it, otherwise in the repository secrets:
+2. Add the host's secrets as **repository secrets** (Settings → Secrets and variables → Actions). Not in an environment: on a private repository with GitHub Free, GitHub stores environment secrets but ignores them when a job runs, and MakeItShip checks repository secrets only:
 
    | Host | Secrets | Values in the caller files |
    |---|---|---|
