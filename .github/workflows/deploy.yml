@@ -6,7 +6,8 @@
 #
 # Jobs:
 #   guard  — production only: stops the run unless MakeItShip (the
-#            makeitship-release App) or a login on the allowed list started it.
+#            makeitship-release App, or its early-access twin makeitship-release-early) or a
+#            login on the allowed list started it.
 #   deploy — builds and deploys to the host: vercel | netlify | cloudflare.
 #   mark   — writes the deploy markers MakeItShip reads (deploy/{env}/{ts},
 #            deploy/{env}/current). The message format is a contract; do not change it.
@@ -137,7 +138,7 @@ jobs:
           set -euo pipefail
           actor="$(printf '%s' "$ACTOR" | tr '[:upper:]' '[:lower:]')"
           ok=false
-          if [ "$actor" = "makeitship-release[bot]" ]; then ok=true; fi
+          case "$actor" in makeitship-release\[bot\]|makeitship-release-early\[bot\]) ok=true ;; esac
           for login in $(printf '%s' "$ALLOWED" | tr ',' ' ' | tr '[:upper:]' '[:lower:]'); do
             if [ "$login" = "$actor" ]; then ok=true; fi
           done
