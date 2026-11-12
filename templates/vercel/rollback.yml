@@ -1,5 +1,5 @@
 # MakeItShip caller — vercel. Copy into .github/workflows/ and replace the
-# placeholders: __VERCEL_ORG_ID__, __VERCEL_PROJECT_ID__, __VERCEL_STAGING_ALIAS__.
+# placeholders: __VERCEL_ORG_ID__, __VERCEL_PROJECT_ID__.
 # Contract: the file name, the four inputs (backup_key declared, unused) and `change <row_id>` in the run name — MakeItShip's Roll back depends on them.
 # The deploy itself lives in ai-lab-development-bot/makeitship-actions (@v1).
 name: Rollback
@@ -46,7 +46,5 @@ jobs:
       host: vercel
       vercel_org_id: __VERCEL_ORG_ID__
       vercel_project_id: __VERCEL_PROJECT_ID__
-      # Rolling staging back moves its stable address too (production's domains move with --prod).
-      vercel_staging_alias: __VERCEL_STAGING_ALIAS__
     secrets:
       VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
