@@ -1,5 +1,11 @@
 # Changelog
 
+## v1.0.3
+
+- MakeItShip's Roll back is for production only; a staging change is reverted with your agent. `rollback.yml` keeps its inputs, and MakeItShip always sends `production` as `target_environment`. Nothing changes in an existing caller.
+- Vercel template `rollback.yml` no longer passes `vercel_staging_alias`: it mattered only when staging was rolled back. An existing caller may keep the line.
+- README: the deploy markers are bootstrapped once, for `production`.
+
 ## v1.0.2
 
 - The production guard also admits `makeitship-release-early[bot]`, the bot of MakeItShip's early-access App, beside `makeitship-release[bot]`.

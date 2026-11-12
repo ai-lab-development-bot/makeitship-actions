@@ -10,8 +10,8 @@ Hosts: **Vercel**, **Netlify**, **Cloudflare Workers**.
 |---|---|---|
 | `deploy-staging.yml` | `deploy.yml@v1` | Every push to `staging` deploys the staging site and records it |
 | `deploy-production.yml` | `deploy.yml@v1` | MakeItShip's **Publish** starts it at a `vX.Y.Z` tag. Production deploys, and the deploy is recorded |
-| `rollback.yml` | `deploy.yml@v1` | MakeItShip's **Roll back** starts it to redeploy the previous version |
-| `bootstrap-markers.yml` | `bootstrap.yml@v1` | Run once per environment so Roll back knows what is live |
+| `rollback.yml` | `deploy.yml@v1` | MakeItShip's **Roll back** starts it to redeploy production's previous version |
+| `bootstrap-markers.yml` | `bootstrap.yml@v1` | Run once for `production` so Roll back knows what is live |
 
 `deploy.yml` runs three jobs:
 
@@ -34,7 +34,7 @@ A repository that needs its own deploy step keeps it and calls `guard.yml` befor
 
 3. Optional: set the repository variable `PRODUCTION_DEPLOYERS` to the GitHub logins, comma-separated, of the people who may deploy production by hand.
 4. Turn off the host's own Git deploys for production, so production changes only through these workflows. The host can keep building previews.
-5. Merge the callers, then run **Bootstrap Deploy Markers** once for `staging` and once for `production`.
+5. Merge the callers, then run **Bootstrap Deploy Markers** once for `production`.
 
 Settings the callers rely on: each calling job grants `contents: write` (the markers are git tags), and each environment has its own concurrency group (`deploy-staging`, `deploy-production`). The templates already carry both.
 
@@ -54,7 +54,7 @@ Do not change these in a caller file. Publish and Roll back fail without them, a
 
 - **The caller files and their paths.** MakeItShip reads `.github/workflows/deploy-production.yml`, `deploy-staging.yml` and `rollback.yml` on both the staging and the production branch. During setup it brings exactly these three files to the production branch, through a pull request you merge. `bootstrap-markers.yml` is run once by hand and is not checked.
 - **No push trigger in production.** `deploy-production.yml` runs only on `workflow_dispatch`, with the inputs `tag` and `triggered_by`.
-- **The rollback inputs.** `rollback.yml` declares `target_environment`, `target_ref`, `backup_key` and `row_id`, and has `change ${{ inputs.row_id }}` in its `run-name`.
+- **The rollback inputs.** `rollback.yml` declares `target_environment`, `target_ref`, `backup_key` and `row_id`, and has `change ${{ inputs.row_id }}` in its `run-name`. MakeItShip rolls back production only and always sends `production` as `target_environment`; the input stays part of the contract.
 - **The environment word in the workflow name.** It contains `Staging`, `Production` or `Rollback`.
 - **The markers.** They are annotated tags whose message is `deployedSHA=`, `parentSHA=` and `backupKey=`.
 
