@@ -208,17 +208,20 @@ jobs:
           : "${VERCEL_ORG_ID:?vercel_org_id is missing}"
           : "${VERCEL_PROJECT_ID:?vercel_project_id is missing}"
           vercel="npx --yes vercel@65.11.0"
+          # Vercel builds the uploaded code itself, as with its Git integration: a build
+          # in this runner would not see the project's Secret variables (they cannot be
+          # pulled) nor its System variables.
           if [ "$ENVIRONMENT" = production ]; then
-            $vercel pull --yes --environment=production
-            $vercel build --prod
-            $vercel deploy --prebuilt --prod
+            $vercel deploy --yes --prod
           else
-            $vercel pull --yes --environment=preview
-            $vercel build
-            url="$($vercel deploy --prebuilt)"
+            url="$($vercel deploy --yes)"
             echo "Staging deploy: ${url}"
             if [ -n "$STAGING_ALIAS" ]; then
-              $vercel alias set "$url" "$STAGING_ALIAS"
+              # `alias` ignores VERCEL_ORG_ID and falls back to the token owner's default
+              # scope; a team-owned project needs its team named.
+              scope=()
+              case "$VERCEL_ORG_ID" in team_*) scope=(--scope "$VERCEL_ORG_ID");; esac
+              $vercel alias set "$url" "$STAGING_ALIAS" "${scope[@]}"
             fi
           fi
 

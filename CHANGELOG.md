@@ -1,5 +1,10 @@
 # Changelog
 
+## v1.0.4
+
+- Vercel: the site is built on Vercel (`vercel deploy`), no longer in the runner (`vercel pull` + `vercel build` + `vercel deploy --prebuilt`). A runner build could not read the project's Secret variables — Vercel's default type for Production and Preview — so a value the build needs came out empty without an error; System variables were missing too. Nothing changes in an existing caller.
+- Vercel: the staging address is set in the project's team (`vercel alias set --scope`). Before, a team-owned project failed this step whenever the token owner's default scope was another team or their personal account, although the deploy itself had worked.
+
 ## v1.0.3
 
 - MakeItShip's Roll back is for production only; a staging change is reverted with your agent. `rollback.yml` keeps its inputs, and MakeItShip always sends `production` as `target_environment`. Nothing changes in an existing caller.
